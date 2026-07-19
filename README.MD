@@ -76,7 +76,7 @@ Buscando: "como faço" ...
 
 ## Roadmap
 
-- [ ] Janela de dias configurável por argumento (`--dias 30`)
+- [x] Janela de dias configurável por argumento (`--dias 30`)
 - [ ] Filtro de idioma mais preciso
 - [ ] Detecção de importações de fóruns antigos
 - [ ] Ignorar discussões já visitadas (histórico local)
