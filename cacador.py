@@ -8,7 +8,7 @@ Uso:
     python3 cacador.py                      # busca com os termos padrão (pt-BR)
     python3 cacador.py "erro instalar"      # busca com termo customizado
 """
-
+import argparse
 import os
 import sys
 import requests
@@ -48,10 +48,10 @@ query($busca: String!, $limite: Int!) {
 """
 
 
-def buscar(token: str, termo: str, limite: int = 10) -> list[dict]:
+def buscar(token: str, termo: str, dias: int = 60, limite: int = 10) -> list[dict]:
     """Busca discussões sem resposta aceita contendo o termo."""
     
-    corte = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+    corte = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
     busca = f"{termo} is:unanswered created:>={corte} sort:created-desc"
     resposta = requests.post(
         API_URL,
@@ -110,15 +110,18 @@ def obter_token() -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Caça GitHub Discussions sem resposta aceita.")
+    parser.add_argument("termo", nargs="*", help="termo de busca customizado (opcional)")
+    parser.add_argument("--dias", type=int, default=60, help="janela de busca em dias (padrão: 60)")
+    args = parser.parse_args()
+
     token = obter_token()
-
-    termos = [" ".join(sys.argv[1:])] if len(sys.argv) > 1 else TERMOS_PADRAO
-
+    termos = [" ".join(args.termo)] if args.termo else TERMOS_PADRAO
     todas: dict[str, dict] = {}
     for termo in termos:
         print(f"Buscando: {termo} ...")
         try:
-            for d in buscar(token, termo):
+            for d in buscar(token, termo, args.dias):
                 if d and eh_boa_oportunidade(d):
                     todas[d["url"]] = d  # dedup por URL
         except Exception as erro:
