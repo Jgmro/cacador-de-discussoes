@@ -24,6 +24,13 @@ TERMOS_PADRAO = [
     '"não funciona"',
 ]
 
+# Palavras-assinatura de texto em português (com e sem acento)
+PALAVRAS_PT = {"não", "nao", "como", "está", "esta", "fazer", "alguém",
+               "alguem", "erro", "consigo", "quando", "então", "entao",
+               "também", "tambem", "obrigado", "ajuda", "preciso",
+               "funciona", "código", "codigo", "estou", "meu", "minha"}
+
+
 QUERY = """
 query($busca: String!, $limite: Int!) {
   search(query: $busca, type: DISCUSSION, first: $limite) {
@@ -34,6 +41,7 @@ query($busca: String!, $limite: Int!) {
         url
         locked
         createdAt
+        bodyText
         comments { totalCount }
         category { name isAnswerable }
         repository {
@@ -71,6 +79,12 @@ def eh_boa_oportunidade(d: dict) -> bool:
     if d.get("locked", False):
         return False  # discussão travada: ninguém consegue responder
     return d.get("category", {}).get("isAnswerable", False)
+
+def parece_portugues(d:dict, minimo: int = 2) ->bool:
+    """Heurística: conta palavras típicas de pt no título + corpo."""
+    texto = f"{d.get('title', '')} {d.get('bodyText', '')}".lower()
+    palavras = set(texto.split())
+    return len(palavras & PALAVRAS_PT) >= minimo
 
 
 def exibir(discussoes: list[dict]) -> None:
@@ -113,6 +127,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Caça GitHub Discussions sem resposta aceita.")
     parser.add_argument("termo", nargs="*", help="termo de busca customizado (opcional)")
     parser.add_argument("--dias", type=int, default=60, help="janela de busca em dias (padrão: 60)")
+    parser.add_argument("--idioma", choices=["pt","todos"], default="pt",
+                        help="filtrar por idioma: pt(padrão) ou todos (sem filtro)")
     args = parser.parse_args()
 
     token = obter_token()
@@ -122,10 +138,13 @@ def main() -> None:
         print(f"Buscando: {termo} ...")
         try:
             for d in buscar(token, termo, args.dias):
-                if d and eh_boa_oportunidade(d):
-                    todas[d["url"]] = d  # dedup por URL
+                if not d or not eh_boa_oportunidade(d):
+                    continue
+                if args.idioma == "pt" and not parece_portugues(d):
+                    continue #filtro de idioma ligado e o texto não aparece em pt
+                todas[d["url"]] = d # dedup por url
         except Exception as erro:
-            print(f"  (falhou: {erro})")
+                    print(f" (falhou:{erro})")    
 
     # Mais recentes primeiro
     ordenadas = sorted(todas.values(), key=lambda d: d["createdAt"], reverse=True)
