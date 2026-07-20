@@ -30,6 +30,8 @@ PALAVRAS_PT = {"não", "nao", "como", "está", "esta", "fazer", "alguém",
                "também", "tambem", "obrigado", "ajuda", "preciso",
                "funciona", "código", "codigo", "estou", "meu", "minha"}
 
+MARCAS_IMPORTACAO = {"disqus", "imported from", "imortado de ", "importado do ", "imporita el"}
+
 
 QUERY = """
 query($busca: String!, $limite: Int!) {
@@ -42,7 +44,9 @@ query($busca: String!, $limite: Int!) {
         locked
         createdAt
         bodyText
-        comments { totalCount }
+        comments(first: 5) { totalCount
+         nodes {author {login } } 
+         }
         category { name isAnswerable }
         repository {
           nameWithOwner
@@ -73,7 +77,6 @@ def buscar(token: str, termo: str, dias: int = 60, limite: int = 10) -> list[dic
         raise RuntimeError(f"Erro da API: {dados['errors']}")
     return dados["data"]["search"]["nodes"]
 
-
 def eh_boa_oportunidade(d: dict) -> bool:
     """Filtra: só Q&A (onde existe 'Mark as answer') e não travadas (locked)."""
     if d.get("locked", False):
@@ -85,6 +88,19 @@ def parece_portugues(d:dict, minimo: int = 2) ->bool:
     texto = f"{d.get('title', '')} {d.get('bodyText', '')}".lower()
     palavras = set(texto.split())
     return len(palavras & PALAVRAS_PT) >= minimo
+
+def eh_importacao(d: dict) -> bool:
+    """Detecta importacoes de fóruns antigos: marca no texto ou monólogo do autor."""
+    texto = f"{d.get('title', '')} {d.get('bodyText','')}".lower()
+    if any(marca in texto for marca in MARCAS_IMPORTACAO):
+        return True # sinal 1 : a importação se anuncia
+    autor = (d.get("author") or {}).get("login")
+    comentarios = (d.get("comments") or {}).get("nodes") or []
+    if autor and len(comentarios) >= 2 and all(
+        (c.get("author") or {}).get("login") == autor for c in comentarios
+    ):
+        return True # sinal 2 : monólogo - autor conversando sozinho
+    return False
 
 
 def exibir(discussoes: list[dict]) -> None:
@@ -142,7 +158,10 @@ def main() -> None:
                     continue
                 if args.idioma == "pt" and not parece_portugues(d):
                     continue #filtro de idioma ligado e o texto não aparece em pt
+                if eh_importacao(d):
+                    continue #importação de fórum antigo: autor nunca volta
                 todas[d["url"]] = d # dedup por url
+
         except Exception as erro:
                     print(f" (falhou:{erro})")    
 
