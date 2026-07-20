@@ -8,6 +8,7 @@ Uso:
     python3 cacador.py                      # busca com os termos padrão (pt-BR)
     python3 cacador.py "erro instalar"      # busca com termo customizado
 """
+import json
 import argparse
 import os
 import sys
@@ -15,6 +16,8 @@ import requests
 from datetime import datetime, timedelta
 
 API_URL = "https://api.github.com/graphql"
+
+ARQUIVO_VISITADAS = "visitadas.json"
 
 # Termos que costumam aparecer em perguntas escritas em português
 TERMOS_PADRAO = [
@@ -102,6 +105,18 @@ def eh_importacao(d: dict) -> bool:
         return True # sinal 2 : monólogo - autor conversando sozinho
     return False
 
+def carregar_visitadas() -> set[set]:
+    """Lê os URLs já visitados em execuções anteriores. Sem arquivo  = memória vazia."""
+    try:
+        with open(ARQUIVO_VISITADAS, encoding="utf-8") as f:
+            return set(json.load(f))
+    except (FileExistsError, json.JSONDecodeError):
+        return set()
+
+def salvar_visitadas(urls: set[str]) -> None:
+    """Salva os URLs já visitados no arquivo de memória."""
+    with open(ARQUIVO_VISITADAS, "w", encoding="utf-8") as f:
+        json.dump(sorted(urls), f)
 
 def exibir(discussoes: list[dict]) -> None:
     if not discussoes:
@@ -145,11 +160,20 @@ def main() -> None:
     parser.add_argument("--dias", type=int, default=60, help="janela de busca em dias (padrão: 60)")
     parser.add_argument("--idioma", choices=["pt","todos"], default="pt",
                         help="filtrar por idioma: pt(padrão) ou todos (sem filtro)")
+    parser.add_argument("--tudo", action="store_true", help="mostra discussões já visitadas")
+    parser.add_argument("--limpar", action="store_true", help="apaga o histórico de discussões já visitadas")
     args = parser.parse_args()
 
+    if args.limpar:
+        salvar_visitadas(set())
+        print("Histórico zerado")
+        return #memoria zerada com sucesso
+
+    visitadas = carregar_visitadas()
     token = obter_token()
     termos = [" ".join(args.termo)] if args.termo else TERMOS_PADRAO
     todas: dict[str, dict] = {}
+    
     for termo in termos:
         print(f"Buscando: {termo} ...")
         try:
@@ -160,15 +184,21 @@ def main() -> None:
                     continue #filtro de idioma ligado e o texto não aparece em pt
                 if eh_importacao(d):
                     continue #importação de fórum antigo: autor nunca volta
-                todas[d["url"]] = d # dedup por url
-
+                
+                if not args.tudo and d["url"] in visitadas:
+                    continue # já vista em execução anterior  
+                todas[d["url"]] = d # dedup por url        
         except Exception as erro:
-                    print(f" (falhou:{erro})")    
+            print(f" (falhou:{erro})") 
 
-    # Mais recentes primeiro
+     # Mais recentes primeiro
     ordenadas = sorted(todas.values(), key=lambda d: d["createdAt"], reverse=True)
     exibir(ordenadas)
+    
+    visitadas.update(d["url"] for d in ordenadas) 
+    salvar_visitadas(visitadas)
 
+    
 
 if __name__ == "__main__":
     main()
