@@ -79,7 +79,7 @@ Buscando: "como faço" ...
 - [x] Janela de dias configurável por argumento (`--dias 30`)
 - [x] Filtro de idioma mais preciso
 - [x] Detecção de importações de fóruns antigos
-- [ ] Ignorar discussões já visitadas (histórico local)
+- [x] Ignorar discussões já visitadas (histórico local)
 
 ## Licença
 
